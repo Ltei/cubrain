@@ -1,0 +1,8 @@
+[package]
+name = "cubrain"
+version = "0.1.0"
+authors = ["Ltei <xavier.peltier@outlook.com>"]
+
+[dependencies]
+cumath = { path = "../ProjectCumath/cumath" }
+cumath_nn = { path = "../ProjectCumath/cumath_nn" }
