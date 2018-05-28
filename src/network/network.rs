@@ -154,8 +154,8 @@ impl Network {
 
     pub fn backpropagate(&self, cuda: &mut CudaHandleHolder, learning_rate: f32, momentum: f32, workspace: &mut NetworkWorkspace,
                          layer_input: &CuVectorDeref<f32>,
-                         layer_output: &mut CuVectorDeref<f32>,
-                         front_signal: &CuVectorDeref<f32>,
+                         layer_output: &CuVectorDeref<f32>,
+                         front_signal: &mut CuVectorDeref<f32>,
                          training_space: &mut NetworkTrainingSpace,
                          weights_change: &mut CuVectorDeref<f32>,
                          back_signal: Option<&mut CuVectorDeref<f32>>) {
@@ -181,8 +181,8 @@ impl Network {
                 let mut hidden_signal = hidden_signals_iter.next().unwrap();
                 gate.backward_training(cuda, learning_rate, momentum,
                                    &hidden_output,
-                                   &mut last_hidden_output,
-                                   &last_hidden_signal,
+                                   &last_hidden_output,
+                                   &mut last_hidden_signal,
                                    &mut weights_change_iter.last(gate.params_count()).unwrap(),
                                    Some(&mut hidden_signal));
                 last_hidden_output = hidden_output;
@@ -192,8 +192,8 @@ impl Network {
             let gate = &self.layers[0];
             gate.backward_training(cuda, learning_rate, momentum,
                                layer_input,
-                               last_hidden_output,
-                               &last_hidden_signal,
+                               &last_hidden_output,
+                               &mut last_hidden_signal,
                                &mut weights_change_iter.last(gate.params_count()).unwrap(),
                                back_signal);
 
@@ -246,14 +246,14 @@ impl NetworkDescriptor {
         self.layers.iter().last().unwrap().output_len()
     }
     pub fn weights_count(&self) -> usize {
-        self.layers.iter().fold(0, |acc, x| { acc + x.weights_count() })
+        self.layers.iter().fold(0, |acc, x| { acc + x.params_count() })
     }
     pub fn create_network(&self) -> Network {
         let params = CuVector::<f32>::zero(self.weights_count());
         let layers = {
             let mut iter = params.slice_iter();
             let result = self.layers.iter().map(|x| {
-                x.create_layer(iter.next(x.weights_count()).unwrap().as_wrapped_ptr())
+                x.create_layer(iter.next(x.params_count()).unwrap().as_wrapped_ptr())
             }).collect::<Vec<_>>();
             assert_eq!(iter.len(), 0);
             result
@@ -281,6 +281,7 @@ mod tests {
     use cumath::*;
     use cumath_nn::*;
     use NetworkBuilder;
+    use ActivationDescriptor;
     use CudaHandleHolder;
     use LayerDescriptor;
     use GetParams;
@@ -288,10 +289,10 @@ mod tests {
     #[test]
     fn test_xor2() {
         let inputs = [
-            CuVector::<f32>::from_host_data(&[0.0, 0.0, 1.0]),
-            CuVector::<f32>::from_host_data(&[0.0, 1.0, 1.0]),
-            CuVector::<f32>::from_host_data(&[1.0, 0.0, 1.0]),
-            CuVector::<f32>::from_host_data(&[1.0, 1.0, 1.0]),
+            CuVector::<f32>::from_host_data(&[0.0, 0.0]),
+            CuVector::<f32>::from_host_data(&[0.0, 1.0]),
+            CuVector::<f32>::from_host_data(&[1.0, 0.0]),
+            CuVector::<f32>::from_host_data(&[1.0, 1.0]),
         ];
         let ideals = [
             CuVector::<f32>::from_host_data(&[0.0]),
@@ -300,12 +301,8 @@ mod tests {
             CuVector::<f32>::from_host_data(&[0.0]),
         ];
 
-        let network = NetworkBuilder::new_dense(3)
-            //.activation(CudnnActivationMode::Tanh, 1.0)
-            //.convolution(2, 2, vec![ConvolutionKernelDescriptor::new(1, 1, 1, 1), ConvolutionKernelDescriptor::new(1, 1, 1, 1), ConvolutionKernelDescriptor::new(1, 1, 1, 1), ConvolutionKernelDescriptor::new(1, 1, 1, 1)])
-            .activation(CudnnActivationMode::Sigmoid, 1.0)
-            .dense(4)
-            .activation(CudnnActivationMode::Sigmoid, 1.0)
+        let network = NetworkBuilder::new_dense(2, false, Some(ActivationDescriptor::sigmoid()))
+            .dense(3, false, Some(ActivationDescriptor::sigmoid()))
             .build(1);
 
         println!("Network descriptor :\n{:?}", network);
@@ -330,7 +327,7 @@ mod tests {
 
                 network.backpropagate(&mut cuda, 0.1, 1.0,
                                       &mut workspace, &inputs[i],
-                                      &mut output_buffer, &output_signal_buffer,
+                                      &output_buffer, &mut output_signal_buffer,
                                       &mut training_space, &mut weights_change_buffer, None);
 
             }
@@ -360,10 +357,10 @@ mod tests {
         }
 
         let layer1 = Box::new(
-            LayerDescriptor::dense(3, hidden_dimension)
+            LayerDescriptor::dense(3, hidden_dimension, false, None)
         ).create_layer(weights1_holder.as_wrapped_ptr());
         let layer2 = Box::new(
-            LayerDescriptor::dense(hidden_dimension+1, 1)
+            LayerDescriptor::dense(hidden_dimension+1, 1, false, None)
         ).create_layer(weights2_holder.as_wrapped_ptr());
 
 
@@ -401,11 +398,11 @@ mod tests {
                 CuVectorMath::<f32>::sub(&output_buffer, &ideals[i], &mut output_signal_buffer, &DEFAULT_STREAM);
                 error += cuda.cublas.asum(&output_signal_buffer);
 
-                layer2.backward_training(&mut cuda, 0.1, 1.0, &hidden_buffer, &mut output_buffer,
-                                     &output_signal_buffer, &mut weights_change2_buffer, Some(&mut hidden_signal_buffer));
+                layer2.backward_training(&mut cuda, 0.1, 1.0, &hidden_buffer, &output_buffer,
+                                     &mut output_signal_buffer, &mut weights_change2_buffer, Some(&mut hidden_signal_buffer));
 
-                layer1.backward_training(&mut cuda, 0.1, 1.0, &inputs[i], &mut hidden_buffer.slice_mut(0, hidden_dimension),
-                                     &hidden_signal_buffer,&mut weights_change1_buffer, None);
+                layer1.backward_training(&mut cuda, 0.1, 1.0, &inputs[i], &hidden_buffer.slice_mut(0, hidden_dimension),
+                                     &mut hidden_signal_buffer,&mut weights_change1_buffer, None);
 
             }
             println!("Iteration {}, Error = {:.20}", iter, error);

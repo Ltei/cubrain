@@ -51,16 +51,16 @@ impl Layer for ActivationLayer {
         assert_eq!(output.len(), self.gate_len);
         self.function.forward(&mut cuda.cudnn, &self.io_shape.link(input), 1.0, &mut self.io_shape.link_mut(output), 0.0);
     }
-    fn backward_training(&self, cuda: &mut CudaHandleHolder, _learning_rate: f32, _momentum: f32,
-                     _layer_input: &CuVectorDeref<f32>, layer_output: &mut CuVectorDeref<f32>, front_signal: &CuVectorDeref<f32>,
-                     weights_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
-        assert_eq!(0, weights_change.len());
+    fn backward_training(&self, cuda: &mut CudaHandleHolder, learning_rate: f32, momentum: f32,
+                         layer_input: &CuVectorDeref<f32>, layer_output: &CuVectorDeref<f32>, front_signal: &mut CuVectorDeref<f32>,
+                         params_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
+        assert_eq!(0, params_change.len());
 
         if let Some(back_signal) = back_signal {
             self.function.backward(&mut cuda.cudnn, 1.0, 0.0,
                                    &self.io_shape.link(layer_output),
                                    &self.io_shape.link(front_signal),
-                                   &self.io_shape.link(layer_output),
+                                   //&self.io_shape.link(layer_output),
                                    &mut self.io_shape.link_mut(back_signal));
         }
     }

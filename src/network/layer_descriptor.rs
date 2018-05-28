@@ -11,9 +11,9 @@ pub enum LayerDescriptor {
     Activation { descriptor: ActivationLayerDescriptor },
 }
 impl LayerDescriptor {
-    pub fn dense(input_len: usize, output_len: usize) -> LayerDescriptor {
+    pub fn dense(input_len: usize, output_len: usize, bias: bool, activation: Option<ActivationDescriptor>) -> LayerDescriptor {
         LayerDescriptor::Dense {
-            descriptor: DenseLayerDescriptor{input_len, output_len}
+            descriptor: DenseLayerDescriptor::new(input_len, output_len, bias, activation)
         }
     }
     pub fn convolution(input_rows: usize, input_cols: usize, kernels: Vec<ConvolutionKernelDescriptor>) -> LayerDescriptor {
@@ -47,7 +47,7 @@ impl LayerDescriptor {
     pub fn input_len(&self) -> usize {
         match self {
             LayerDescriptor::Dense {descriptor} => {
-                descriptor.input_len
+                descriptor.input_len()
             },
             LayerDescriptor::Convolution {descriptor} => {
                 descriptor.input_rows * descriptor.input_cols
@@ -60,7 +60,7 @@ impl LayerDescriptor {
     pub fn output_len(&self) -> usize {
         match self {
             LayerDescriptor::Dense {descriptor} => {
-                descriptor.output_len
+                descriptor.output_len()
             },
             LayerDescriptor::Convolution {descriptor} => {
                 descriptor.output_len
@@ -70,10 +70,10 @@ impl LayerDescriptor {
             },
         }
     }
-    pub fn weights_count(&self) -> usize {
+    pub fn params_count(&self) -> usize {
         match self {
             LayerDescriptor::Dense {descriptor} => {
-                descriptor.input_len * descriptor.output_len
+                descriptor.params_count()
             },
             LayerDescriptor::Convolution {descriptor} => {
                 descriptor.weights_count

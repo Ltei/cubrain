@@ -75,8 +75,8 @@ impl Layer for ConvolutionLayer {
 
     #[allow(unused_variables)]
     fn backward_training(&self, cuda: &mut CudaHandleHolder, learning_rate: f32, momentum: f32,
-                     layer_input: &CuVectorDeref<f32>, layer_output: &mut CuVectorDeref<f32>, front_signal: &CuVectorDeref<f32>,
-                     weights_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
+                         layer_input: &CuVectorDeref<f32>, _layer_output: &CuVectorDeref<f32>, front_signal: &mut CuVectorDeref<f32>,
+                         params_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
         unimplemented!()
         /*assert_eq!(layer_input.len(), self.descriptor.input_len());
         assert_eq!(front_signal.len(), self.descriptor.output_len());
