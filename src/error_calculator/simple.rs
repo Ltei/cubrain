@@ -2,7 +2,8 @@
 use cumath::{CuVector, DEFAULT_STREAM};
 use super::ErrorCalculator;
 use CudaHandleHolder;
-use ga
+use GetParams;
+use ForwardInference;
 use training_set::PackedTrainingSet;
 
 
@@ -12,20 +13,20 @@ pub struct ErrorCalculatorSimple<'a> {
     output_buffer: CuVector<f32>,
 }
 impl<'a> ErrorCalculatorSimple<'a> {
-    pub fn new(network: &Network, training_set: &'a PackedTrainingSet) -> ErrorCalculatorSimple<'a> {
+    pub fn new(computation: &ForwardInference, training_set: &'a PackedTrainingSet) -> ErrorCalculatorSimple<'a> {
         ErrorCalculatorSimple {
             training_set,
-            workspace: CuVector::<f32>::zero(network.workspace_len()),
+            workspace: CuVector::<f32>::zero(computation.workspace_len()),
             output_buffer: CuVector::<f32>::zero(training_set.packed_outputs.len()),
         }
     }
 }
-impl<'a> ErrorCalculator for ErrorCalculatorSimple<'a> {
-    fn compute_error(&mut self, network: &Network, cuda: &mut CudaHandleHolder) -> f32 {
+impl<'a, T: GetParams + ForwardInference> ErrorCalculator<T> for ErrorCalculatorSimple<'a> {
+    fn compute_error(&mut self, computation: &T, cuda: &mut CudaHandleHolder) -> f32 {
         {
             let mut iter = self.output_buffer.slice_mut_iter();
             for input in &self.training_set.inputs {
-                network.forward_inference(cuda, input, &mut iter.next(network.output_len()).unwrap(), &mut self.workspace);
+                computation.forward_inference(cuda, input, &mut iter.next(computation.output_len()).unwrap(), &mut self.workspace);
             }
             assert_eq!(iter.len(), 0);
         }

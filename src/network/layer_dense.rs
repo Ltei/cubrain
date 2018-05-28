@@ -5,13 +5,16 @@ use CudaHandleHolder;
 use ForwardInference;
 
 
-
 pub struct DenseLayer {
     pub(super) weights: CuMatrixPtr<f32>,
 }
 
 impl ForwardInference for DenseLayer {
 
+    fn input_len(&self) -> usize { self.weights.rows() }
+    fn output_len(&self) -> usize {
+        self.weights.cols()
+    }
     fn workspace_len(&self) -> usize { 0 }
 
     fn forward_inference(&self, cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>, _workspace: &mut CuVectorDeref<f32>) {
@@ -23,34 +26,29 @@ impl ForwardInference for DenseLayer {
 }
 
 impl Layer for DenseLayer {
-    fn duplicate_structure(&self, data: CuVectorPtr<f32>) -> Box<Layer> {
+
+    fn clone_structure(&self, data: CuVectorPtr<f32>) -> Box<Layer> {
         Box::new(DenseLayer {
             weights: unsafe { data.deref().matrix_slice(0, self.weights.rows(), self.weights.cols()).as_wrapped_ptr() },
         })
     }
-    fn input_len(&self) -> usize {
-        self.weights.rows()
-    }
-    fn output_len(&self) -> usize {
-        self.weights.cols()
-    }
-    fn weights_count(&self) -> usize {
+
+    fn params_count(&self) -> usize {
         self.weights.rows() * self.weights.cols()
     }
-    fn workspace_len(&self) -> usize {
-        0
+
+
+    fn forward_training(&self, cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
+        assert_eq!(input.len(), self.weights.rows());
+        assert_eq!(output.len(), self.weights.cols());
+        unsafe { cuda.cublas.mult_row_m(input, &self.weights.deref(), output) }
     }
-    fn compute(&self, cuda: &mut CudaHandleHolder, _workspace: &mut CuVectorDeref<f32>, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
-        assert_eq!(input.len(), self.input_len());
-        assert_eq!(output.len(), self.output_len());
-        unsafe { cuda.cublas.mult_row_m(input, self.weights.deref(), output) };
-    }
-    fn backpropagate(&self, cuda: &mut CudaHandleHolder, _workspace: &mut CuVectorDeref<f32>, learning_rate: f32, momentum: f32,
+    fn backward_training(&self, cuda: &mut CudaHandleHolder, learning_rate: f32, momentum: f32,
                      layer_input: &CuVectorDeref<f32>, _layer_output: &mut CuVectorDeref<f32>, front_signal: &CuVectorDeref<f32>,
                      weights_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
         assert_eq!(layer_input.len(), self.input_len());
         assert_eq!(front_signal.len(), self.output_len());
-        assert_eq!(weights_change.len(), self.weights_count());
+        assert_eq!(weights_change.len(), self.params_count());
 
         let mut weights_change = weights_change.matrix_slice_mut(0, self.input_len(), self.output_len());
         cuda.cublas.mult_col_row_rescaled(layer_input, front_signal, &mut weights_change, -learning_rate, momentum);
@@ -121,11 +119,11 @@ mod tests {
         for iter in 0..1000 {
             let mut error = 0.0;
             for i in 0..4 {
-                layer.compute(&mut cuda, &mut workspace, &inputs[i], &mut output_buffer);
+                layer.forward_training(&mut cuda, &inputs[i], &mut output_buffer);
 
                 CuVectorMath::<f32>::sub(&output_buffer, &ideals[i], &mut output_signal_buffer, &DEFAULT_STREAM);
                 error += cuda.cublas.asum(&output_signal_buffer);
-                layer.backpropagate(&mut cuda, &mut workspace, 0.1, 1.0, &inputs[i], &mut output_buffer,
+                layer.backward_training(&mut cuda, 0.1, 1.0, &inputs[i], &mut output_buffer,
                                      &output_signal_buffer,&mut weights_change_buffer, None);
 
             }
@@ -189,16 +187,16 @@ mod tests {
         for iter in 0..10000 {
             let mut error = 0.0;
             for i in 0..1 {
-                layer1.compute(&mut cuda, &mut workspace, &inputs[i], &mut hidden_buffer.slice_mut(0, hidden_dimension));
-                layer2.compute(&mut cuda, &mut workspace, &hidden_buffer, &mut output_buffer);
+                layer1.forward_training(&mut cuda, &inputs[i], &mut hidden_buffer.slice_mut(0, hidden_dimension));
+                layer2.forward_training(&mut cuda, &hidden_buffer, &mut output_buffer);
 
                 CuVectorMath::<f32>::sub(&output_buffer, &ideals[i], &mut output_signal_buffer, &DEFAULT_STREAM);
                 error += cuda.cublas.asum(&output_signal_buffer);
 
-                layer2.backpropagate(&mut cuda, &mut workspace, 0.1, 1.0, &hidden_buffer, &mut output_buffer,
+                layer2.backward_training(&mut cuda, 0.1, 1.0, &hidden_buffer, &mut output_buffer,
                                      &output_signal_buffer, &mut weights_change2_buffer, Some(&mut hidden_signal_buffer));
 
-                layer1.backpropagate(&mut cuda, &mut workspace, 0.1, 1.0, &inputs[i], &mut hidden_buffer.slice_mut(0, hidden_dimension),
+                layer1.backward_training(&mut cuda, 0.1, 1.0, &inputs[i], &mut hidden_buffer.slice_mut(0, hidden_dimension),
                                      &hidden_signal_buffer,&mut weights_change1_buffer, None);
 
             }

@@ -19,8 +19,27 @@ pub(super) struct ConvolutionKernel {
     pub(super) row_step: usize,
     pub(super) col_step: usize,
 }
+
+
+impl ForwardInference for ConvolutionLayer {
+
+    fn input_len(&self) -> usize { self.input_rows * self.input_cols }
+    fn output_len(&self) -> usize { self.output_len }
+    fn workspace_len(&self) -> usize { 0 }
+
+    fn forward_inference(&self, _cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>, _workspace: &mut CuVectorDeref<f32>) {
+        let mut output = output.slice_mut_iter();
+        for kernel in &self.kernels {
+            CuMatrixMath::<f32>::convolution(&input.matrix_slice(0, self.input_rows, self.input_cols), unsafe { kernel.kernel.deref() },
+                                             &mut output.next_matrix(kernel.output_rows, kernel.output_cols).unwrap(),
+                                             kernel.row_step as i32, kernel.col_step as i32, &DEFAULT_STREAM);
+        }
+    }
+
+}
+
 impl Layer for ConvolutionLayer {
-    fn duplicate_structure(&self, data: CuVectorPtr<f32>) -> Box<Layer> {
+    fn clone_structure(&self, data: CuVectorPtr<f32>) -> Box<Layer> {
         let mut iter = unsafe { data.deref().slice_iter() };
         let output = Box::new(ConvolutionLayer {
             input_rows: self.input_rows,
@@ -40,19 +59,12 @@ impl Layer for ConvolutionLayer {
         assert_eq!(iter.len(), 0);
         output
     }
-    fn input_len(&self) -> usize {
-        self.input_rows * self.input_cols
-    }
-    fn output_len(&self) -> usize {
-        self.output_len
-    }
-    fn weights_count(&self) -> usize {
+
+    fn params_count(&self) -> usize {
         self.weights_count
     }
-    fn workspace_len(&self) -> usize {
-        0
-    }
-    fn compute(&self, _cuda: &mut CudaHandleHolder, _workspace: &mut CuVectorDeref<f32>, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
+
+    fn forward_training(&self, _cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
         let mut output = output.slice_mut_iter();
         for kernel in &self.kernels {
             CuMatrixMath::<f32>::convolution(&input.matrix_slice(0, self.input_rows, self.input_cols), unsafe { kernel.kernel.deref() },
@@ -60,8 +72,9 @@ impl Layer for ConvolutionLayer {
                                              kernel.row_step as i32, kernel.col_step as i32, &DEFAULT_STREAM);
         }
     }
+
     #[allow(unused_variables)]
-    fn backpropagate(&self, cuda: &mut CudaHandleHolder, workspace: &mut CuVectorDeref<f32>, learning_rate: f32, momentum: f32,
+    fn backward_training(&self, cuda: &mut CudaHandleHolder, learning_rate: f32, momentum: f32,
                      layer_input: &CuVectorDeref<f32>, layer_output: &mut CuVectorDeref<f32>, front_signal: &CuVectorDeref<f32>,
                      weights_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
         unimplemented!()

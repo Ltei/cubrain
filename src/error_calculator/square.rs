@@ -2,6 +2,8 @@
 use cumath::{CuVector, DEFAULT_STREAM};
 use super::ErrorCalculator;
 use CudaHandleHolder;
+use GetParams;
+use ForwardInference;
 use training_set::PackedTrainingSet;
 
 
@@ -12,7 +14,7 @@ pub struct ErrorCalculatorSquare<'a> {
     output_buffer: CuVector<f32>,
 }
 impl<'a> ErrorCalculatorSquare<'a> {
-    pub fn new(computation: &Computation, training_set: &'a PackedTrainingSet) -> ErrorCalculatorSquare<'a> {
+    pub fn new(computation: &ForwardInference, training_set: &'a PackedTrainingSet) -> ErrorCalculatorSquare<'a> {
         ErrorCalculatorSquare {
             training_set,
             workspace: CuVector::<f32>::zero(computation.workspace_len()),
@@ -20,8 +22,8 @@ impl<'a> ErrorCalculatorSquare<'a> {
         }
     }
 }
-impl<'a> ErrorCalculator for ErrorCalculatorSquare<'a> {
-    fn compute_error(&mut self, computation: &Computation, cuda: &mut CudaHandleHolder) -> f32 {
+impl<'a, T: GetParams + ForwardInference> ErrorCalculator<T> for ErrorCalculatorSquare<'a> {
+    fn compute_error(&mut self, computation: &T, cuda: &mut CudaHandleHolder) -> f32 {
         {
             let mut iter = self.output_buffer.slice_mut_iter();
             for input in &self.training_set.inputs {

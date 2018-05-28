@@ -3,7 +3,7 @@ use super::*;
 use cumath::*;
 use cumath_nn::*;
 use CudaHandleHolder;
-
+use ForwardInference;
 
 
 
@@ -14,9 +14,27 @@ pub struct ActivationLayer {
     pub(super) io_shape: CuTensorDescriptor<f32>,
 }
 
+impl ForwardInference for ActivationLayer {
+
+    fn input_len(&self) -> usize {
+        self.gate_len
+    }
+    fn output_len(&self) -> usize {
+        self.gate_len
+    }
+    fn workspace_len(&self) -> usize { 0 }
+
+    fn forward_inference(&self, cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>, _workspace: &mut CuVectorDeref<f32>) {
+        assert_eq!(input.len(), self.gate_len);
+        assert_eq!(output.len(), self.gate_len);
+        self.function.forward(&mut cuda.cudnn, &self.io_shape.link(input), 1.0, &mut self.io_shape.link_mut(output), 0.0);
+    }
+
+}
+
 impl Layer for ActivationLayer {
 
-    fn duplicate_structure(&self, _weights: CuVectorPtr<f32>) -> Box<Layer> {
+    fn clone_structure(&self, _weights: CuVectorPtr<f32>) -> Box<Layer> {
         let info = self.function.get_info();
         Box::new(ActivationLayer {
             function: CuActivationDescriptor::new(info.mode, info.coef),
@@ -25,16 +43,15 @@ impl Layer for ActivationLayer {
         })
     }
 
-    fn input_len(&self) -> usize { self.gate_len }
-    fn output_len(&self) -> usize { self.gate_len }
-    fn weights_count(&self) -> usize { 0 }
-    fn workspace_len(&self) -> usize { 0 }
-    fn compute(&self, cuda: &mut CudaHandleHolder, _workspace: &mut CuVectorDeref<f32>, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
+
+    fn params_count(&self) -> usize { 0 }
+
+    fn forward_training(&self, cuda: &mut CudaHandleHolder, input: &CuVectorDeref<f32>, output: &mut CuVectorDeref<f32>) {
         assert_eq!(input.len(), self.gate_len);
         assert_eq!(output.len(), self.gate_len);
         self.function.forward(&mut cuda.cudnn, &self.io_shape.link(input), 1.0, &mut self.io_shape.link_mut(output), 0.0);
     }
-    fn backpropagate(&self, cuda: &mut CudaHandleHolder, _workspace: &mut CuVectorDeref<f32>, _learning_rate: f32, _momentum: f32,
+    fn backward_training(&self, cuda: &mut CudaHandleHolder, _learning_rate: f32, _momentum: f32,
                      _layer_input: &CuVectorDeref<f32>, layer_output: &mut CuVectorDeref<f32>, front_signal: &CuVectorDeref<f32>,
                      weights_change: &mut CuVectorDeref<f32>, back_signal: Option<&mut CuVectorDeref<f32>>) {
         assert_eq!(0, weights_change.len());

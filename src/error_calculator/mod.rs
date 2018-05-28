@@ -1,4 +1,10 @@
 
+mod simple;
+pub use self::simple::*;
+mod square;
+pub use self::square::*;
+
+
 
 use CudaHandleHolder;
 use GetParams;
