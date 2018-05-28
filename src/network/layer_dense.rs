@@ -160,7 +160,7 @@ mod tests {
     use super::*;
 
     #[test]
-    //#[ignore]
+    #[ignore]
     fn test_one_layer() {
 
         let mut weights_holder = CuVector::<f32>::zero(4);
@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    //#[ignore]
+    #[ignore]
     fn test_xor() {
         let hidden_dimension = 3;
 

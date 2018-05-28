@@ -1,10 +1,10 @@
 
 use cumath::{CuVector, DEFAULT_STREAM};
 use super::ErrorCalculator;
+use training::training_set::PackedTrainingSet;
 use CudaHandleHolder;
 use GetParams;
 use ForwardInference;
-use training_set::PackedTrainingSet;
 
 
 pub struct ErrorCalculatorSimple<'a> {

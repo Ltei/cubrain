@@ -5,7 +5,7 @@ use CloneStructure;
 use GetParams;
 use VectorUtils;
 use error_calculator::*;
-use magnitude_manager::*;
+use training::magnitude_manager::*;
 
 
 struct TrainingTrainable<T: GetParams + CloneStructure> {

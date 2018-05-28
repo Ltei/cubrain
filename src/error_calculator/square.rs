@@ -4,7 +4,7 @@ use super::ErrorCalculator;
 use CudaHandleHolder;
 use GetParams;
 use ForwardInference;
-use training_set::PackedTrainingSet;
+use training::training_set::PackedTrainingSet;
 
 
 

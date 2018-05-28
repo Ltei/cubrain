@@ -5,7 +5,7 @@ use GetParams;
 use CloneStructure;
 use VectorUtils;
 use error_calculator::*;
-use magnitude_manager::*;
+use training::magnitude_manager::*;
 
 
 

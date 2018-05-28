@@ -9,13 +9,9 @@ pub use self::meta::*;
 mod network;
 pub use self::network::*;
 
-mod training_set;
-pub use self::training_set::*;
-
 mod error_calculator;
 pub use self::error_calculator::*;
 
-mod magnitude_manager;
 pub mod training;
 
 
